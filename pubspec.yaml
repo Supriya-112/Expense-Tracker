@@ -30,15 +30,14 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  sqflite: ^2.3.0          # The Offline Database
-  path: ^1.9.0             # To find the database file
-  path_provider: ^2.1.2    # To find the phone's storage folders
-  csv: ^6.0.0              # To create the export file
-  share_plus: ^10.1.0      # To pop up the "Share/Email" menu
+  sqflite: ^2.3.0
+  path_provider: ^2.1.2
+  csv: ^6.0.0
+  share_plus: ^10.1.4
   fl_chart: ^0.70.0
   intl: ^0.19.0
-  image_picker: ^1.2.1
-  shared_preferences: ^2.5.4
+  image_picker: ^1.1.2
+  shared_preferences: ^2.2.2
 
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
