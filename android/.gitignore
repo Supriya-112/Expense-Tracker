@@ -1,0 +1,23 @@
+# Flutter/Dart related
+build/
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+/internal/
+
+# Symbolication related
+app.*.symbols
+app.*.map.json
+
+# Android Studio / VS Code
+.idea/
+.vscode/
+*.iml
+*.ipr
+*.iws
+
+# MacOS files
+.DS_Store
