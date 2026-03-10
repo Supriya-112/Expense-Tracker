@@ -39,7 +39,11 @@ class HomeScreenState extends State<HomeScreen> {
   double _totalIncome = 0;
   double _totalExpense = 0;
   String _selectedMonth = DateFormat('MM').format(DateTime.now());
+
+  // User Preferences
   String? _profilePicPath;
+  String _userName = "Tap to set name";
+  String _currency = "\$";
 
   final List<String> _categories = [
     'Bills',
@@ -55,13 +59,54 @@ class HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    _loadProfile();
+    _loadPreferences();
     _refreshData();
   }
 
-  void _loadProfile() async {
+  // --- PREFERENCES LOGIC (Name, Pic, Currency) ---
+  void _loadPreferences() async {
     final prefs = await SharedPreferences.getInstance();
-    setState(() => _profilePicPath = prefs.getString('profile_pic'));
+    setState(() {
+      _profilePicPath = prefs.getString('profile_pic');
+      _userName = prefs.getString('user_name') ?? "Tap to set name";
+      _currency = prefs.getString('currency') ?? "\$";
+    });
+  }
+
+  void _updateCurrency(String newCurrency) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('currency', newCurrency);
+    setState(() => _currency = newCurrency);
+  }
+
+  void _editUserName() {
+    final controller = TextEditingController(text: _userName);
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("Set Username"),
+        content: TextField(
+          controller: controller,
+          textCapitalization: TextCapitalization.words,
+          decoration: const InputDecoration(hintText: "Enter your name"),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Cancel"),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final prefs = await SharedPreferences.getInstance();
+              await prefs.setString('user_name', controller.text);
+              setState(() => _userName = controller.text);
+              Navigator.pop(context);
+            },
+            child: const Text("Save"),
+          ),
+        ],
+      ),
+    );
   }
 
   void _pickImage() async {
@@ -74,33 +119,25 @@ class HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  // --- DATA REFRESH ---
   void _refreshData() async {
     final data = await DatabaseHelper.instance.queryAll();
     double income = 0;
     double expense = 0;
-
-    List<Map<String, dynamic>> filtered = data.where((tx) {
-      return tx['date'].substring(5, 7) == _selectedMonth;
-    }).toList();
-
+    List<Map<String, dynamic>> filtered = data
+        .where((tx) => tx['date'].substring(5, 7) == _selectedMonth)
+        .toList();
     for (var item in filtered) {
       if (item['type'] == 'Income')
         income += item['amount'];
       else
         expense += item['amount'];
     }
-
     setState(() {
       _filteredTransactions = filtered;
       _totalIncome = income;
       _totalExpense = expense;
     });
-  }
-
-  void _deleteTransaction(int id) async {
-    final db = await DatabaseHelper.instance.database;
-    await db.delete('transactions', where: 'id = ?', whereArgs: [id]);
-    _refreshData();
   }
 
   @override
@@ -113,6 +150,7 @@ class HomeScreenState extends State<HomeScreen> {
         ),
         backgroundColor: Colors.teal.shade100,
         actions: [
+          _buildCurrencyDropdown(),
           _buildMonthDropdown(),
           IconButton(icon: const Icon(Icons.download), onPressed: _exportToCSV),
         ],
@@ -134,14 +172,37 @@ class HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  Widget _buildCurrencyDropdown() {
+    return DropdownButton<String>(
+      value: _currency,
+      underline: Container(),
+      icon: const Icon(Icons.payments_outlined, color: Colors.teal),
+      items: ['\$', '₹', '£', '€'].map((String value) {
+        return DropdownMenuItem<String>(value: value, child: Text(value));
+      }).toList(),
+      onChanged: (val) {
+        if (val != null) _updateCurrency(val);
+      },
+    );
+  }
+
   Widget _buildDrawer() {
     return Drawer(
       child: ListView(
         padding: EdgeInsets.zero,
         children: [
           UserAccountsDrawerHeader(
-            accountName: const Text("Jane Doe", style: TextStyle(fontSize: 18)),
-            accountEmail: const Text(""),
+            accountName: InkWell(
+              onTap: _editUserName,
+              child: Row(
+                children: [
+                  Text(_userName, style: const TextStyle(fontSize: 18)),
+                  const SizedBox(width: 8),
+                  const Icon(Icons.edit, size: 16, color: Colors.white70),
+                ],
+              ),
+            ),
+            accountEmail: const Text("Financial Dashboard"),
             currentAccountPicture: GestureDetector(
               onTap: _pickImage,
               child: CircleAvatar(
@@ -158,7 +219,7 @@ class HomeScreenState extends State<HomeScreen> {
           ),
           ListTile(
             leading: const Icon(Icons.delete_forever, color: Colors.red),
-            title: const Text("Reset App Data"),
+            title: const Text("Reset All Transactions"),
             onTap: () async {
               final db = await DatabaseHelper.instance.database;
               await db.delete('transactions');
@@ -238,10 +299,7 @@ class HomeScreenState extends State<HomeScreen> {
                   );
                   return SideTitleWidget(
                     meta: meta,
-                    child: Text(
-                      value == 0 ? 'Income' : 'Expense',
-                      style: style,
-                    ),
+                    child: Text(value == 0 ? 'In' : 'Out', style: style),
                   );
                 },
               ),
@@ -264,8 +322,8 @@ class HomeScreenState extends State<HomeScreen> {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceAround,
           children: [
-            _statColumn("In", _totalIncome, Colors.green),
-            _statColumn("Out", _totalExpense, Colors.red),
+            _statColumn("Income", _totalIncome, Colors.green),
+            _statColumn("Expense", _totalExpense, Colors.red),
             _statColumn(
               "Net",
               savings,
@@ -282,7 +340,7 @@ class HomeScreenState extends State<HomeScreen> {
       children: [
         Text(label, style: const TextStyle(fontSize: 12, color: Colors.grey)),
         Text(
-          "\$${amount.toStringAsFixed(0)}",
+          "$_currency${amount.toStringAsFixed(0)}",
           style: TextStyle(
             color: color,
             fontSize: 18,
@@ -294,9 +352,8 @@ class HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildTransactionList() {
-    if (_filteredTransactions.isEmpty) {
-      return const Center(child: Text("Empty month. Let's add some data!"));
-    }
+    if (_filteredTransactions.isEmpty)
+      return const Center(child: Text("No data found for this month."));
     return ListView.builder(
       itemCount: _filteredTransactions.length,
       itemBuilder: (context, index) {
@@ -310,7 +367,17 @@ class HomeScreenState extends State<HomeScreen> {
             padding: const EdgeInsets.only(right: 20),
             child: const Icon(Icons.delete, color: Colors.white),
           ),
-          onDismissed: (dir) => _deleteTransaction(tx['id']),
+          onDismissed: (dir) {
+            final db = DatabaseHelper.instance.database; // Handled via ID
+            DatabaseHelper.instance.database.then(
+              (db) => db.delete(
+                'transactions',
+                where: 'id = ?',
+                whereArgs: [tx['id']],
+              ),
+            );
+            _refreshData();
+          },
           child: ListTile(
             leading: CircleAvatar(
               backgroundColor: tx['type'] == 'Income'
@@ -330,7 +397,7 @@ class HomeScreenState extends State<HomeScreen> {
               "${tx['category']} • ${tx['date'].substring(0, 10)}",
             ),
             trailing: Text(
-              "\$${tx['amount']}",
+              "$_currency${tx['amount']}",
               style: TextStyle(
                 fontWeight: FontWeight.bold,
                 color: tx['type'] == 'Income' ? Colors.green : Colors.black,
@@ -365,8 +432,7 @@ class HomeScreenState extends State<HomeScreen> {
               children: [
                 TextField(
                   controller: nameController,
-                  textCapitalization:
-                      TextCapitalization.sentences, // AUTO-CAPITALIZATION
+                  textCapitalization: TextCapitalization.sentences,
                   decoration: const InputDecoration(labelText: 'Description'),
                 ),
                 TextField(
@@ -390,7 +456,6 @@ class HomeScreenState extends State<HomeScreen> {
                   onChanged: (val) => setDialogState(() => selectedCat = val!),
                   decoration: const InputDecoration(labelText: 'Category'),
                 ),
-                const SizedBox(height: 15),
                 TextButton.icon(
                   icon: const Icon(Icons.event),
                   label: Text(DateFormat('yyyy-MM-dd').format(selectedDate)),
@@ -437,7 +502,7 @@ class HomeScreenState extends State<HomeScreen> {
                   );
                 }
                 _refreshData();
-                if (mounted) Navigator.pop(context);
+                Navigator.pop(context);
               },
               child: const Text('Save'),
             ),
@@ -463,7 +528,9 @@ class HomeScreenState extends State<HomeScreen> {
     }
     String csvData = const ListToCsvConverter().convert(rows);
     final directory = await getTemporaryDirectory();
-    final file = File("${directory.path}/LoonieBin_Month_$_selectedMonth.csv");
+    final file = File(
+      "${directory.path}/GoldDigger_Report_$_selectedMonth.csv",
+    );
     await file.writeAsString(csvData);
     await Share.shareXFiles([XFile(file.path)], text: 'My Finance Report');
   }
